@@ -1,5 +1,5 @@
 pub fn nth(n: u32) -> u32 {
-    (1..)
+    (2..)
         .filter(|&x| is_prime(x))
         .nth((n + 1) as usize)
         .unwrap()
