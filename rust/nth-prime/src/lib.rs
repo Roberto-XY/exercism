@@ -1,10 +1,8 @@
 pub fn nth(n: u32) -> u32 {
-    match n {
-        n => (1..)
-            .filter(|c| is_prime(*c))
-            .nth((n + 1) as usize)
-            .unwrap(),
-    }
+    (1..)
+        .filter(|&x| is_prime(x))
+        .nth((n + 1) as usize)
+        .unwrap()
 }
 
 fn is_prime(n: u32) -> bool {
