@@ -1,52 +1,28 @@
-#[derive(Debug)]
-enum EncodingState {
-    Uninitialized,
-    Running(char, u64),
-}
+use std::iter;
 
 pub fn encode(source: &str) -> String {
-    let (mut acc, remaining_state) = source.chars().fold(
-        (String::new(), EncodingState::Uninitialized),
-        |(mut acc, encoding_state), c| match encoding_state {
-            EncodingState::Uninitialized => (acc, EncodingState::Running(c, 1)),
+    let mut result = String::new();
+    let mut chars_iter = source.chars().peekable();
+    let mut curr_count = 0;
 
-            EncodingState::Running(last_char, counter) if last_char == c => {
-                (acc, EncodingState::Running(c, counter + 1))
+    while let Some(c) = chars_iter.next() {
+        curr_count += 1;
+        if chars_iter.peek() != Some(&c) {
+            if curr_count > 1 {
+                result.push_str(&curr_count.to_string())
             }
-
-            EncodingState::Running(last_char, 1) => {
-                acc.push(last_char);
-                (acc, EncodingState::Running(c, 1))
-            }
-
-            EncodingState::Running(last_char, counter) => {
-                acc.extend(counter.to_string().chars());
-                acc.push(last_char);
-                (acc, EncodingState::Running(c, 1))
-            }
-        },
-    );
-
-    match remaining_state {
-        EncodingState::Uninitialized => acc,
-
-        EncodingState::Running(last_char, 1) => {
-            acc.push(last_char);
-            acc
-        }
-
-        EncodingState::Running(last_char, counter) => {
-            acc.extend(counter.to_string().chars());
-            acc.push(last_char);
-            acc
+            result.push(c);
+            curr_count = 0;
         }
     }
+
+    result
 }
 
 pub fn decode(source: &str) -> String {
     let mut chars_iter = source.chars();
 
-    std::iter::from_fn(|| match chars_iter.next() {
+    iter::from_fn(|| match chars_iter.next() {
         None => None,
         Some(c) if c.is_numeric() => {
             let mut current_c = c;
@@ -58,11 +34,11 @@ pub fn decode(source: &str) -> String {
             }
 
             let num = number_str.parse::<usize>().unwrap();
-            Some(vec![current_c; num])
+            Some(iter::repeat(current_c).take(num))
         }
-        Some(c) => Some(vec![c]),
+        Some(c) => Some(iter::repeat(c).take(1)),
     })
-    .flat_map(|vec| vec.into_iter())
     .fuse()
+    .flatten()
     .collect()
 }
