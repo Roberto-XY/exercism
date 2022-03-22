@@ -1,30 +1,27 @@
 {
-  "blurb": "Given a moment, determine the moment that would be after a gigasecond has passed.",
+  "blurb": "We are going to do the `Transform` step of an Extract-Transform-Load.",
   "authors": [
-    "IanWhitney"
+    "EduardoBautista"
   ],
   "contributors": [
-    "andy5995",
     "ashleygwilliams",
-    "cbzehner",
+    "ClashTheBunny",
     "coriolinus",
     "cwhakes",
     "EduardoBautista",
     "efx",
     "ErikSchierboom",
-    "houhoulis",
     "IanWhitney",
-    "janczer",
-    "leoyvens",
+    "kotp",
+    "kytrinyx",
     "lutostag",
     "mkantor",
+    "navossoc",
     "nfiles",
-    "NieDzejkob",
-    "ocstl",
     "petertseng",
     "rofrol",
-    "sacherjj",
     "stringparser",
+    "tushartyagi",
     "xakon",
     "ZapAnton"
   ],
@@ -34,12 +31,12 @@
       "Cargo.toml"
     ],
     "test": [
-      "tests/gigasecond.rs"
+      "tests/etl.rs"
     ],
     "example": [
       ".meta/example.rs"
     ]
   },
-  "source": "Chapter 9 in Chris Pine's online Learn to Program tutorial.",
-  "source_url": "http://pine.fm/LearnToProgram/?Chapter=09"
+  "source": "The Jumpstart Lab team",
+  "source_url": "http://jumpstartlab.com"
 }

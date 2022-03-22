@@ -1,29 +1,23 @@
 {
-  "blurb": "Given a moment, determine the moment that would be after a gigasecond has passed.",
+  "blurb": "Write a function to determine if a list is a sublist of another list.",
   "authors": [
-    "IanWhitney"
+    "EduardoBautista"
   ],
   "contributors": [
-    "andy5995",
     "ashleygwilliams",
-    "cbzehner",
     "coriolinus",
     "cwhakes",
+    "eddyp",
     "EduardoBautista",
     "efx",
     "ErikSchierboom",
-    "houhoulis",
     "IanWhitney",
-    "janczer",
-    "leoyvens",
+    "kytrinyx",
     "lutostag",
     "mkantor",
     "nfiles",
-    "NieDzejkob",
-    "ocstl",
     "petertseng",
     "rofrol",
-    "sacherjj",
     "stringparser",
     "xakon",
     "ZapAnton"
@@ -34,12 +28,10 @@
       "Cargo.toml"
     ],
     "test": [
-      "tests/gigasecond.rs"
+      "tests/sublist.rs"
     ],
     "example": [
       ".meta/example.rs"
     ]
-  },
-  "source": "Chapter 9 in Chris Pine's online Learn to Program tutorial.",
-  "source_url": "http://pine.fm/LearnToProgram/?Chapter=09"
+  }
 }
