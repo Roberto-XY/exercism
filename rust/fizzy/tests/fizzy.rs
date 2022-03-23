@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Rem};
+use std::ops::Rem;
 
 // /// A Matcher is a single rule of fizzbuzz: given a function on T, should
 // /// a word be substituted in? If yes, which word?
@@ -30,7 +30,7 @@ pub struct Fizzy<'a, T> {
 
 impl<'a, T> Fizzy<'a, T>
 where
-    T: ToString + Clone + 'a,
+    T: ToString + Copy + 'a,
 {
     // feel free to change the signature to `mut self` if you like
     #[must_use]
@@ -72,7 +72,7 @@ impl<'a, T> Default for Fizzy<'a, T> {
 /// convenience function: return a Fizzy which applies the standard fizz-buzz rules
 pub fn fizz_buzz<'a, T: 'a>() -> Fizzy<'a, T>
 where
-    T: Rem<T, Output = T> + PartialEq + Display + Copy,
+    T: Rem<T, Output = T> + PartialEq + ToString + Copy,
     u8: Into<T>,
 {
     Fizzy::default()
