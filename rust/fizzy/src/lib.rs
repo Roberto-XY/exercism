@@ -1,32 +1,19 @@
-use std::ops::Rem;
+use std::{fmt::Display, ops::Rem};
 
-/// A Matcher is a single rule of fizzbuzz: given a function on T, should
-/// a word be substituted in? If yes, which word?
-pub struct Matcher<'a, T> {
-    subs: String,
-    f: Box<dyn Fn(T) -> bool + 'a>,
-}
+// /// A Matcher is a single rule of fizzbuzz: given a function on T, should
+// /// a word be substituted in? If yes, which word?
+// pub struct Matcher<F, T> {
+//     f: F,
+// }
 
-impl<'a, T> Matcher<'a, T> {
-    pub fn new<F, S>(matcher: F, subs: S) -> Matcher<'a, T>
-    where
-        F: Fn(T) -> bool + 'a,
-        S: ToString,
-    {
-        Matcher {
-            subs: subs.to_string(),
-            f: Box::new(matcher),
-        }
-    }
-
-    fn substitute(&self, val: T) -> Option<&str> {
-        if (self.f)(val) {
-            Some(&self.subs)
-        } else {
-            None
-        }
-    }
-}
+// impl<F, T> Matcher<F, T>
+// where
+//     F: Fn(T) -> Option<String>,
+// {
+//     pub fn new(matcher: F) -> Matcher<F, T> {
+//         Matcher { f: matcher }
+//     }
+// }
 
 /// A Fizzy is a set of matchers, which may be applied to an iterator.
 ///
@@ -38,21 +25,20 @@ impl<'a, T> Matcher<'a, T> {
 ///
 /// Also, it's a good excuse to try out using impl trait.
 pub struct Fizzy<'a, T> {
-    matchers: Vec<Matcher<'a, T>>,
+    matchers: Vec<Box<dyn Fn(T) -> Option<String> + 'a>>,
 }
 
 impl<'a, T> Fizzy<'a, T>
 where
     T: ToString + Clone + 'a,
 {
-    pub fn new() -> Self {
-        Fizzy::default()
-    }
-
     // feel free to change the signature to `mut self` if you like
     #[must_use]
-    pub fn add_matcher(mut self, matcher: Matcher<'a, T>) -> Self {
-        self.matchers.push(matcher);
+    pub fn add_matcher<F>(mut self, matcher: F) -> Self
+    where
+        F: Fn(T) -> Option<String> + 'a,
+    {
+        self.matchers.push(Box::new(matcher));
         self
     }
 
@@ -65,7 +51,7 @@ where
             let subs: String = self
                 .matchers
                 .iter()
-                .flat_map(|matcher| matcher.substitute(t.clone()))
+                .flat_map(|matcher| matcher(t.clone()))
                 .collect();
 
             if subs.is_empty() {
@@ -84,15 +70,35 @@ impl<'a, T> Default for Fizzy<'a, T> {
 }
 
 /// convenience function: return a Fizzy which applies the standard fizz-buzz rules
-pub fn fizz_buzz<'a, T>() -> Fizzy<'a, T>
+pub fn fizz_buzz<'a, T: 'a>() -> Fizzy<'a, T>
 where
-    T: Rem<T, Output = T> + PartialEq,
+    T: Rem<T, Output = T> + PartialEq + Display + Copy,
     u8: Into<T>,
 {
-    Fizzy {
-        matchers: vec![
-            Matcher::new(|x| x % 3.into() == 0.into(), "fizz"),
-            Matcher::new(|x| x % 5.into() == 0.into(), "buzz"),
-        ],
-    }
+    Fizzy::default()
+        .add_matcher(|x| {
+            if x % 3.into() == 0.into() {
+                Some("fizz".to_string())
+            } else {
+                None
+            }
+        })
+        .add_matcher(|x| {
+            if x % 5.into() == 0.into() {
+                Some("buzz".to_string())
+            } else {
+                None
+            }
+        })
+}
+
+pub fn main() {
+    let expect = vec![
+        "1", "2", "Fizz", "4", "Buzz", "Fizz", "Bam", "8", "Fizz", "Buzz", "11", "Fizz", "13",
+        "Bam", "BuzzFizz", "16",
+    ];
+    let fizzer: Fizzy<i32> = fizz_buzz();
+    let got = fizzer.apply(1..=16).into_iter().collect::<Vec<_>>();
+    let got = dbg!(got);
+    assert_eq!(expect, got);
 }

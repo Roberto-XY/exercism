@@ -1,124 +1,111 @@
-use fizzy::*;
+use std::{fmt::Display, ops::Rem};
 
-macro_rules! expect {
-    () => {
-        vec![
-            "1", "2", "fizz", "4", "buzz", "fizz", "7", "8", "fizz", "buzz", "11", "fizz", "13",
-            "14", "fizzbuzz", "16",
-        ]
-    };
+// /// A Matcher is a single rule of fizzbuzz: given a function on T, should
+// /// a word be substituted in? If yes, which word?
+// pub struct Matcher<F, T> {
+//     f: F,
+// }
+
+// impl<F, T> Matcher<F, T>
+// where
+//     F: Fn(T) -> Option<String>,
+// {
+//     pub fn new(matcher: F) -> Matcher<F, T> {
+//         Matcher { f: matcher }
+//     }
+// }
+
+/// A Fizzy is a set of matchers, which may be applied to an iterator.
+///
+/// Strictly speaking, it's usually more idiomatic to use `iter.map()` than to
+/// consume an iterator with an `apply` method. Given a Fizzy instance, it's
+/// pretty straightforward to construct a closure which applies it to all
+/// elements of the iterator. However, we're using the `apply` pattern
+/// here because it's a simpler interface for students to implement.
+///
+/// Also, it's a good excuse to try out using impl trait.
+pub struct Fizzy<'a, T> {
+    matchers: Vec<Box<dyn Fn(T) -> Option<String> + 'a>>,
 }
 
-#[test]
-fn test_simple() {
-    let got = fizz_buzz::<i32>().apply(1..=16).collect::<Vec<_>>();
-    assert_eq!(expect!(), got);
+impl<'a, T> Fizzy<'a, T>
+where
+    T: ToString + Clone + 'a,
+{
+    // feel free to change the signature to `mut self` if you like
+    #[must_use]
+    pub fn add_matcher<F>(mut self, matcher: F) -> Self
+    where
+        F: Fn(T) -> Option<String> + 'a,
+    {
+        self.matchers.push(Box::new(matcher));
+        self
+    }
+
+    /// map this fizzy onto every element of an iterator, returning a new iterator
+    pub fn apply<I>(self, iter: I) -> impl Iterator<Item = String> + 'a
+    where
+        I: IntoIterator<Item = T> + 'a,
+    {
+        iter.into_iter().map(move |t| {
+            let subs: String = self
+                .matchers
+                .iter()
+                .flat_map(|matcher| matcher(t.clone()))
+                .collect();
+
+            if subs.is_empty() {
+                t.to_string()
+            } else {
+                subs
+            }
+        })
+    }
 }
 
-#[test]
-#[ignore]
-fn test_u8() {
-    let got = fizz_buzz::<u8>().apply(1_u8..=16).collect::<Vec<_>>();
-    assert_eq!(expect!(), got);
+impl<'a, T> Default for Fizzy<'a, T> {
+    fn default() -> Self {
+        Fizzy { matchers: vec![] }
+    }
 }
 
-#[test]
-#[ignore]
-fn test_u64() {
-    let got = fizz_buzz::<u64>().apply(1_u64..=16).collect::<Vec<_>>();
-    assert_eq!(expect!(), got);
+/// convenience function: return a Fizzy which applies the standard fizz-buzz rules
+pub fn fizz_buzz<'a, T: 'a>() -> Fizzy<'a, T>
+where
+    T: Rem<T, Output = T> + PartialEq + Display + Copy,
+    u8: Into<T>,
+{
+    Fizzy::default()
+        .add_matcher(|x| {
+            if x % 5.into() == 0.into() {
+                Some("Buzz".to_string())
+            } else {
+                None
+            }
+        })
+        .add_matcher(|x| {
+            if x % 3.into() == 0.into() {
+                Some("Fizz".to_string())
+            } else {
+                None
+            }
+        })
+        .add_matcher(|x| {
+            if x % 7.into() == 0.into() {
+                Some("Bam".to_string())
+            } else {
+                None
+            }
+        })
 }
 
-#[test]
-#[ignore]
-fn test_nonsequential() {
-    let collatz_12 = &[12, 6, 3, 10, 5, 16, 8, 4, 2, 1];
-    let expect = vec![
-        "fizz", "fizz", "fizz", "buzz", "buzz", "16", "8", "4", "2", "1",
-    ];
-    let got = fizz_buzz::<i32>()
-        .apply(collatz_12.iter().cloned())
-        .collect::<Vec<_>>();
-    assert_eq!(expect, got);
-}
-
-#[test]
-#[ignore]
-fn test_custom() {
+pub fn main() {
     let expect = vec![
         "1", "2", "Fizz", "4", "Buzz", "Fizz", "Bam", "8", "Fizz", "Buzz", "11", "Fizz", "13",
         "Bam", "BuzzFizz", "16",
     ];
-    let fizzer: Fizzy<i32> = Fizzy::new()
-        .add_matcher(Matcher::new(|n: i32| n % 5 == 0, "Buzz"))
-        .add_matcher(Matcher::new(|n: i32| n % 3 == 0, "Fizz"))
-        .add_matcher(Matcher::new(|n: i32| n % 7 == 0, "Bam"));
-    let got = fizzer.apply(1..=16).collect::<Vec<_>>();
+    let fizzer: Fizzy<i32> = fizz_buzz();
+    let got = fizzer.apply(1..=16).into_iter().collect::<Vec<_>>();
+    let got = dbg!(got);
     assert_eq!(expect, got);
-}
-
-#[test]
-#[ignore]
-fn test_f64() {
-    // a tiny bit more complicated becuase range isn't natively implemented on floats
-    // NOTE: this test depends on a language feature introduced in Rust 1.34. If you
-    // have an older compiler, upgrade. If you have an older compiler and cannot upgrade,
-    // feel free to ignore this test.
-    let got = fizz_buzz::<f64>()
-        .apply(std::iter::successors(Some(1.0), |prev| Some(prev + 1.0)))
-        .take(16)
-        .collect::<Vec<_>>();
-    assert_eq!(expect!(), got);
-}
-
-#[test]
-#[ignore]
-fn test_minimal_generic_bounds() {
-    // NOTE: this test depends on a language feature introduced in Rust 1.34. If you
-    // have an older compiler, upgrade. If you have an older compiler and cannot upgrade,
-    // feel free to ignore this test.
-    use std::fmt;
-    use std::ops::{Add, Rem};
-
-    #[derive(Clone, Copy, Debug, Default, PartialEq)]
-    struct Fizzable(u8);
-
-    impl From<u8> for Fizzable {
-        fn from(i: u8) -> Fizzable {
-            Fizzable(i)
-        }
-    }
-
-    impl fmt::Display for Fizzable {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let Fizzable(ref n) = self;
-            write!(f, "{}", n)
-        }
-    }
-
-    impl Add for Fizzable {
-        type Output = Fizzable;
-        fn add(self, rhs: Fizzable) -> Fizzable {
-            let Fizzable(n1) = self;
-            let Fizzable(n2) = rhs;
-            Fizzable(n1 + n2)
-        }
-    }
-
-    impl Rem for Fizzable {
-        type Output = Fizzable;
-        fn rem(self, rhs: Fizzable) -> Fizzable {
-            let Fizzable(n1) = self;
-            let Fizzable(n2) = rhs;
-            Fizzable(n1 % n2)
-        }
-    }
-
-    let got = fizz_buzz::<Fizzable>()
-        .apply(std::iter::successors(Some(Fizzable(1)), |prev| {
-            Some(*prev + 1.into())
-        }))
-        .take(16)
-        .collect::<Vec<_>>();
-    assert_eq!(expect!(), got);
 }
