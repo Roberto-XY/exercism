@@ -20,7 +20,7 @@ pub fn verse(n: u32) -> String {
 }
 
 pub fn sing(start: u32, end: u32) -> String {
-    let mut acc = (end..start + 1)
+    let mut acc = (end..=start)
         .rev()
         .map(|i| verse(i))
         .fold(String::new(), |mut acc, verse| {
