@@ -14,7 +14,7 @@ fn bench_tiny_parallel(b: &mut Bencher) {
 #[bench]
 fn bench_tiny_sequential(b: &mut Bencher) {
     let tiny = &["a"];
-    b.iter(|| parallel_letter_frequency::frequency_5(tiny, 3));
+    b.iter(|| parallel_letter_frequency::frequency_2(tiny, 3));
 }
 
 #[bench]
@@ -26,7 +26,7 @@ fn bench_small_parallel(b: &mut Bencher) {
 #[bench]
 fn bench_small_sequential(b: &mut Bencher) {
     let texts = all_texts(1);
-    b.iter(|| parallel_letter_frequency::frequency_5(&texts, 3));
+    b.iter(|| parallel_letter_frequency::frequency_2(&texts, 3));
 }
 
 #[bench]
@@ -38,7 +38,7 @@ fn bench_large_parallel(b: &mut Bencher) {
 #[bench]
 fn bench_large_sequential(b: &mut Bencher) {
     let texts = all_texts(30);
-    b.iter(|| parallel_letter_frequency::frequency_5(&texts, 3));
+    b.iter(|| parallel_letter_frequency::frequency_2(&texts, 3));
 }
 
 #[bench]
@@ -50,7 +50,7 @@ fn bench_huge_parallel(b: &mut Bencher) {
 #[bench]
 fn bench_huge_sequential(b: &mut Bencher) {
     let texts = all_texts(900);
-    b.iter(|| parallel_letter_frequency::frequency_5(&texts, 3));
+    b.iter(|| parallel_letter_frequency::frequency_2(&texts, 3));
 }
 
 #[bench]
@@ -62,7 +62,7 @@ fn bench_very_huge_parallel(b: &mut Bencher) {
 #[bench]
 fn bench_very_huge_sequential(b: &mut Bencher) {
     let texts = all_texts(4000);
-    b.iter(|| parallel_letter_frequency::frequency_5(&texts, 3));
+    b.iter(|| parallel_letter_frequency::frequency_2(&texts, 3));
 }
 
 /// Simple sequential char frequency. Can it be beat?
