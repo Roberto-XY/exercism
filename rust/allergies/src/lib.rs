@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, iter};
 
 pub struct Allergies {
     allergens: HashSet<Allergen>,
@@ -18,23 +18,33 @@ pub enum Allergen {
 
 impl Allergies {
     pub fn new(score: u32) -> Self {
-        // Horner schema
-        let mut power_of_2s = vec![];
         let mut curr_score = score;
-        let mut curr_exponent = 0;
-        while curr_score != 0 {
-            let is_odd = curr_score % 2 == 1;
+        let mut curr_exponent = 0u8;
 
-            if is_odd {
-                power_of_2s.push(curr_exponent);
+        // Horner schema: 34_(10) == 100010_(2) == 2⁵ + 2¹
+        let indices_of_set_bits_in_binary_number = iter::from_fn(|| {
+            if curr_score == 0 {
+                None
+            } else {
+                let is_odd = curr_score % 2 == 1;
+
+                let next = if is_odd {
+                    Some(Some(curr_exponent))
+                } else {
+                    Some(None)
+                };
+
+                curr_exponent += 1;
+                curr_score /= 2;
+
+                next
             }
+        })
+        .fuse()
+        .flatten();
 
-            curr_exponent += 1;
-            curr_score /= 2;
-        }
-
-        let allergens = power_of_2s
-            .iter()
+        let allergens = indices_of_set_bits_in_binary_number
+            .take(8)
             .flat_map(|x| match x {
                 0 => Some(Allergen::Eggs),
                 1 => Some(Allergen::Peanuts),
