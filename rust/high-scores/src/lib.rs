@@ -21,11 +21,24 @@ impl<'a> HighScores<'a> {
     }
 
     pub fn personal_top_three(&self) -> Vec<u32> {
-        let mut vec = self.scores.to_vec();
+        self.scores
+            .iter()
+            .fold([None, None, None], |high_scores, score| match high_scores {
+                [first, second, _] if is_higher(score, first) => [Some(score), first, second],
 
-        vec.sort_unstable_by(|a, b| b.cmp(a));
-        vec.truncate(3);
+                [first, second, _] if is_higher(score, second) => [first, Some(score), second],
 
-        vec
+                [first, second, third] if is_higher(score, third) => [first, second, Some(score)],
+
+                high_scores => high_scores,
+            })
+            .iter()
+            .flatten()
+            .map(|x| **x)
+            .collect()
     }
+}
+
+fn is_higher(score_a: &u32, score_b: Option<&u32>) -> bool {
+    score_b.map(|x| score_a > x).unwrap_or(true)
 }

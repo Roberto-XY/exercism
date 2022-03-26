@@ -19,7 +19,7 @@ fn is_question(message: &str) -> bool {
 }
 
 fn is_yelled(message: &str) -> bool {
-    let is_alphabetic = message.chars().filter(|x| x.is_alphabetic()).count() > 0;
+    let is_alphabetic = message.chars().any(|x| x.is_alphabetic());
 
     message.to_uppercase() == message && is_alphabetic
 }
