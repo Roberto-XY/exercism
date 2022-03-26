@@ -23,15 +23,20 @@ impl<'a> HighScores<'a> {
     pub fn personal_top_three(&self) -> Vec<u32> {
         self.scores
             .iter()
-            .fold([None, None, None], |high_scores, score| match high_scores {
-                [first, second, _] if is_higher(score, first) => [Some(score), first, second],
-
-                [first, second, _] if is_higher(score, second) => [first, Some(score), second],
-
-                [first, second, third] if is_higher(score, third) => [first, second, Some(score)],
-
-                high_scores => high_scores,
-            })
+            .fold(
+                [None, None, None],
+                |high_scores @ [first, second, third], score| {
+                    if is_higher(score, first) {
+                        [Some(score), first, second]
+                    } else if is_higher(score, second) {
+                        [first, Some(score), second]
+                    } else if is_higher(score, third) {
+                        [first, second, Some(score)]
+                    } else {
+                        high_scores
+                    }
+                },
+            )
             .iter()
             .flatten()
             .map(|x| **x)
