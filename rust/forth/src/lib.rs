@@ -187,8 +187,8 @@ fn parse<'a>(
     let mut iter = tokenize(input);
 
     // outer option -> iterator has next
-    // inner option -> we returned a word or error. Definitions only mutate the word_env
-    // result -> word creation was successful
+    // inner option -> we returned a word or error. Definitions only mutate the word_env.
+    // result -> word creation was successful?
     iter::from_fn(move || match iter.next() {
         Some(Ok(Token::StartWordDef)) => match parse_word_definition(&mut iter, word_env) {
             Ok(()) => Some(None),
@@ -201,7 +201,6 @@ fn parse<'a>(
         None => None,
     })
     // throw all definition outputs (None) away
-    // .filter_map(|x| x)
     .flatten()
     .fuse()
 }
