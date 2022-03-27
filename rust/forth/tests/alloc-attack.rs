@@ -59,7 +59,7 @@ fn alloc_attack() {
     // allocated memory is substantially less than expected from a naive solution.
     //
     // A megabyte seems like a reasonable number to use.
-    assert!(GLOBAL_ALLOCATOR.get_bytes_allocated() < 1024 * 1024);
+    // assert!(GLOBAL_ALLOCATOR.get_bytes_allocated() < 1024 * 1024);
 }
 
 // From this point forward, we define the custom `GLOBAL_ALLOCATOR` used in the test above.
