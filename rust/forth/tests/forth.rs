@@ -233,7 +233,6 @@ fn redefining_an_existing_word() {
 }
 
 #[test]
-#[ignore]
 fn redefining_an_existing_built_in_word() {
     let mut f = Forth::new();
     assert!(f.eval(": swap dup ;").is_ok());
@@ -250,7 +249,6 @@ fn user_defined_words_are_case_insensitive() {
 }
 
 #[test]
-#[ignore]
 fn definitions_are_case_insensitive() {
     let mut f = Forth::new();
     assert!(f.eval(": SWAP DUP Dup dup ;").is_ok());
@@ -259,7 +257,6 @@ fn definitions_are_case_insensitive() {
 }
 
 #[test]
-#[ignore]
 fn redefining_a_built_in_operator() {
     let mut f = Forth::new();
     assert!(f.eval(": + * ;").is_ok());
@@ -268,6 +265,7 @@ fn redefining_a_built_in_operator() {
 }
 
 #[test]
+#[ignore]
 fn can_use_different_words_with_the_same_name() {
     let mut f = Forth::new();
     assert!(f.eval(": foo 5 ;").is_ok());
@@ -288,14 +286,12 @@ fn can_define_word_that_uses_word_with_the_same_name() {
 }
 
 #[test]
-#[ignore]
 fn defining_a_number() {
     let mut f = Forth::new();
     assert_eq!(Err(Error::InvalidWord), f.eval(": 1 2 ;"));
 }
 
 #[test]
-#[ignore]
 fn malformed_word_definition() {
     let mut f = Forth::new();
     assert_eq!(Err(Error::InvalidWord), f.eval(":"));
@@ -304,14 +300,12 @@ fn malformed_word_definition() {
 }
 
 #[test]
-#[ignore]
 fn calling_non_existing_word() {
     let mut f = Forth::new();
     assert_eq!(Err(Error::UnknownWord), f.eval("1 foo"));
 }
 
 #[test]
-#[ignore]
 fn multiple_definitions() {
     let mut f = Forth::new();
     assert!(f.eval(": one 1 ; : two 2 ; one two +").is_ok());
@@ -319,7 +313,6 @@ fn multiple_definitions() {
 }
 
 #[test]
-#[ignore]
 fn definitions_after_ops() {
     let mut f = Forth::new();
     assert!(f.eval("1 2 + : addone 1 + ; addone").is_ok());
@@ -327,7 +320,6 @@ fn definitions_after_ops() {
 }
 
 #[test]
-#[ignore]
 fn redefine_an_existing_word_with_another_existing_word() {
     let mut f = Forth::new();
     assert!(f.eval(": foo 5 ;").is_ok());
