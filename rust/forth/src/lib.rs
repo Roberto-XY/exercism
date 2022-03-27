@@ -3,8 +3,17 @@ use std::{collections::HashMap, iter};
 
 pub type Value = i32;
 
+// Sequence of words that make up a new word
 type WordDefinition = Vec<Word>;
+// If word definitions get overwritten they are appended
 type WordHistory = Vec<WordDefinition>;
+
+#[derive(Debug, PartialEq)]
+pub struct WordAddress {
+    name: String,
+    // index into the WordHistory
+    history_index: usize,
+}
 
 #[derive(Debug)]
 pub struct Forth {
@@ -18,18 +27,6 @@ enum Token {
     EndWordDef,
     WordName(String),
     Number(i32),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Definition {
-    name: String,
-    words: Vec<Word>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct WordAddress {
-    name: String,
-    index: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,15 +81,20 @@ impl Forth {
     }
 }
 
+impl Default for Forth {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn interpret(
     stack: &mut Vec<Value>,
     word_env: &HashMap<String, Vec<Vec<Word>>>,
     word: &Word,
 ) -> Result<(), Error> {
-    dbg!(&word);
-    dbg!(&word_env);
     match word {
         Word::Push(num) => stack.push(*num),
+
         Word::Plus => match (stack.pop(), stack.pop()) {
             (Some(a), Some(b)) => stack.push(b + a),
             _ => return Err(Error::StackUnderflow),
@@ -141,19 +143,21 @@ fn interpret(
             _ => return Err(Error::StackUnderflow),
         },
 
-        Word::Call(WordAddress { name, index }) => match word_env.get(name) {
+        Word::Call(WordAddress {
+            name,
+            history_index: index,
+        }) => match word_env.get(name) {
             None => return Err(Error::UnknownWord),
             Some(word_history) => word_history[*index]
                 .as_slice()
                 .iter()
-                .try_for_each(move |word| interpret(stack, word_env, word))?,
+                .try_for_each(|word| interpret(stack, word_env, word))?,
         },
     }
 
     Ok(())
 }
-
-fn tokenize<'a>(input: &'a str) -> impl Iterator<Item = Result<Token, Error>> + 'a {
+fn tokenize(input: &str) -> impl Iterator<Item = Result<Token, Error>> + '_ {
     input
         .split_ascii_whitespace()
         .filter(|s| !s.is_empty())
@@ -165,7 +169,7 @@ fn tokenize<'a>(input: &'a str) -> impl Iterator<Item = Result<Token, Error>> + 
                 if s.chars().all(|c| c.is_ascii_digit()) {
                     match s.parse::<i32>() {
                         Ok(num) => Ok(Token::Number(num)),
-                        Err(err) => Err(Error::InvalidWord),
+                        Err(_) => Err(Error::InvalidWord),
                     }
                 } else {
                     Ok(Token::WordName(s))
@@ -175,72 +179,96 @@ fn tokenize<'a>(input: &'a str) -> impl Iterator<Item = Result<Token, Error>> + 
 }
 
 fn parse<'a>(
-    word_env: &'a mut HashMap<String, Vec<Vec<Word>>>,
+    // TODO: could make this truly streaming by propagating immutable, minimal necessary history
+    // with each parsed word
+    word_env: &'a mut HashMap<String, WordHistory>,
     input: &'a str,
 ) -> impl Iterator<Item = Result<Word, Error>> + 'a {
     let mut iter = tokenize(input);
 
+    // outer option -> iterator has next
+    // inner option -> we returned a word or error. Definitions only mutate the word_env
+    // result -> word creation was successful
     iter::from_fn(move || match iter.next() {
-        Some(Ok(Token::StartWordDef)) => {
-            let name = match iter.next() {
-                Some(Ok(Token::WordName(name))) => name,
-                None | Some(_) => return Some(Some(Err(Error::InvalidWord))),
-            };
-            let index = word_env.get(&name).map_or(0, |x| x.len());
-            // let word_address = WordAddress { name, index };
+        Some(Ok(Token::StartWordDef)) => match parse_word_definition(&mut iter, word_env) {
+            Ok(()) => Some(None),
+            Err(error) => Some(Some(Err(error))),
+        },
+        Some(Ok(Token::EndWordDef)) => Some(Some(Err(Error::InvalidWord))),
+        Some(Ok(Token::WordName(name))) => Some(Some(parse_word_name(name, word_env))),
+        Some(Ok(Token::Number(num))) => Some(Some(Ok(Word::Push(num)))),
+        Some(Err(error)) => Some(Some(Err(error))),
+        None => None,
+    })
+    // throw all definition outputs (None) away
+    // .filter_map(|x| x)
+    .flatten()
+    .fuse()
+}
 
-            let mut is_in_definition = true;
-            let mut words = vec![];
-            while is_in_definition {
-                match iter.next() {
-                    Some(Ok(Token::StartWordDef)) => {
-                        return Some(Some(Err(Error::InvalidWord)));
-                    }
-                    Some(Ok(Token::EndWordDef)) => {
-                        dbg!(&words);
-                        is_in_definition = false;
-                        if words.is_empty() {
-                            return Some(Some(Err(Error::InvalidWord)));
-                        }
-                    }
-                    Some(Ok(Token::Number(num))) => {
-                        words.push(Word::Push(num));
-                    }
-                    Some(Ok(Token::WordName(name))) => {
-                        let index_opt = word_env.get(&name).map(|x| x.len()).map(|x| x - 1);
+fn parse_word_name(
+    name: String,
+    word_env: &mut HashMap<String, WordHistory>,
+) -> Result<Word, Error> {
+    match get_latest_word_address(name, word_env) {
+        None => Err(Error::UnknownWord),
+        Some(word_address) => Ok(Word::Call(word_address)),
+    }
+}
 
-                        match index_opt {
-                            None => return Some(Some(Err(Error::UnknownWord))),
-                            Some(index) => words.push(Word::Call(WordAddress { name, index })),
-                        }
-                    }
+fn parse_word_definition<T>(
+    iter: &mut T,
+    word_env: &mut HashMap<String, WordHistory>,
+) -> Result<(), Error>
+where
+    T: Iterator<Item = Result<Token, Error>>,
+{
+    let name = match iter.next() {
+        Some(Ok(Token::WordName(name))) => name,
+        None | Some(_) => return Err(Error::InvalidWord),
+    };
 
-                    Some(Err(error)) => return Some(Some(Err(error))),
-                    None => return Some(Some(Err(Error::InvalidWord))),
+    let mut is_in_definition = true;
+    let mut words = vec![];
+    while is_in_definition {
+        match iter.next() {
+            Some(Ok(Token::StartWordDef)) => return Err(Error::InvalidWord),
+
+            Some(Ok(Token::EndWordDef)) => {
+                is_in_definition = false;
+                if words.is_empty() {
+                    return Err(Error::InvalidWord);
                 }
             }
 
-            let word_history = word_env.entry(name).or_insert(vec![]);
-            word_history.push(words);
+            Some(Err(error)) => return Err(error),
 
-            Some(None)
-        }
-        Some(Ok(Token::EndWordDef)) => return Some(Some(Err(Error::InvalidWord))),
-        Some(Ok(Token::WordName(name))) => {
-            let index_opt = word_env.get(&name).map(|x| x.len()).map(|x| x - 1);
+            None => return Err(Error::InvalidWord),
 
-            match index_opt {
-                None => return Some(Some(Err(Error::UnknownWord))),
-                Some(index) => Some(Some(Ok(Word::Call(WordAddress { name, index })))),
-            }
-            // let index = word_env.get(&name).map_or(0, |x| x.len());
-            // let word_address = WordAddress { name, index };
-            // Some(Ok(Word::Call(word_address)))
+            Some(Ok(Token::Number(num))) => words.push(Word::Push(num)),
+
+            Some(Ok(Token::WordName(name))) => match get_latest_word_address(name, word_env) {
+                None => return Err(Error::UnknownWord),
+                Some(word_address) => words.push(Word::Call(word_address)),
+            },
         }
-        Some(Ok(Token::Number(num))) => Some(Some(Ok(Word::Push(num)))),
-        Some(Err(error)) => return Some(Some(Err(error))),
-        None => None,
-    })
-    .filter_map(|x| x)
-    .fuse()
+    }
+
+    let word_history = word_env.entry(name).or_insert(vec![]);
+    word_history.push(words);
+
+    Ok(())
+}
+
+fn get_latest_word_address(
+    name: String,
+    word_env: &mut HashMap<String, WordHistory>,
+) -> Option<WordAddress> {
+    word_env
+        .get(&name)
+        .map(|word_history| word_history.len())
+        .map(|history_len| WordAddress {
+            name,
+            history_index: history_len - 1,
+        })
 }
