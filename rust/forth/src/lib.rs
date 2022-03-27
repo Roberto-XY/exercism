@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::result::Result;
 use std::{collections::HashMap, iter, panic};
 
@@ -12,14 +13,14 @@ pub struct Forth {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Word {
     Push(Value),
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Duplicate,
-    Drop,
-    Swap,
-    Over,
+    // Plus,
+    // Minus,
+    // Multiply,
+    // Divide,
+    // Duplicate,
+    // Drop,
+    // Swap,
+    // Over,
     ReferenceNewWord(String),
     DefineNewWord(String, Vec<Word>),
 }
@@ -59,58 +60,71 @@ impl Forth {
                     dbg!(&self.stack);
                     self.stack.push(*num);
                 }
-                Word::Plus => match (self.stack.pop(), self.stack.pop()) {
-                    (Some(a), Some(b)) => self.stack.push(b + a),
-                    _ => return Err(Error::StackUnderflow),
-                },
 
-                Word::Minus => match (self.stack.pop(), self.stack.pop()) {
-                    (Some(a), Some(b)) => self.stack.push(b - a),
-                    _ => return Err(Error::StackUnderflow),
-                },
+                Word::ReferenceNewWord(name) if name.as_str() == "+" => {
+                    match (self.stack.pop(), self.stack.pop()) {
+                        (Some(a), Some(b)) => self.stack.push(b + a),
+                        _ => return Err(Error::StackUnderflow),
+                    }
+                }
 
-                Word::Multiply => match (self.stack.pop(), self.stack.pop()) {
-                    (Some(a), Some(b)) => self.stack.push(b * a),
-                    _ => return Err(Error::StackUnderflow),
-                },
+                Word::ReferenceNewWord(name) if name.as_str() == "-" => {
+                    match (self.stack.pop(), self.stack.pop()) {
+                        (Some(a), Some(b)) => self.stack.push(b - a),
+                        _ => return Err(Error::StackUnderflow),
+                    }
+                }
 
-                Word::Divide => match (self.stack.pop(), self.stack.pop()) {
-                    (Some(0), Some(_)) => return Err(Error::DivisionByZero),
-                    (Some(a), Some(b)) => self.stack.push(b / a),
-                    _ => return Err(Error::StackUnderflow),
-                },
+                Word::ReferenceNewWord(name) if name.as_str() == "*" => {
+                    match (self.stack.pop(), self.stack.pop()) {
+                        (Some(a), Some(b)) => self.stack.push(b * a),
+                        _ => return Err(Error::StackUnderflow),
+                    }
+                }
 
-                Word::Duplicate => match self.stack.last() {
+                Word::ReferenceNewWord(name) if name.as_str() == "/" => {
+                    match (self.stack.pop(), self.stack.pop()) {
+                        (Some(0), Some(_)) => return Err(Error::DivisionByZero),
+                        (Some(a), Some(b)) => self.stack.push(b / a),
+                        _ => return Err(Error::StackUnderflow),
+                    }
+                }
+
+                Word::ReferenceNewWord(name) if name.as_str() == "dup" => match self.stack.last() {
                     Some(&a) => self.stack.push(a),
                     _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Drop => match self.stack.pop() {
+                Word::ReferenceNewWord(name) if name.as_str() == "drop" => match self.stack.pop() {
                     Some(_) => (),
                     _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Swap => match (self.stack.pop(), self.stack.pop()) {
-                    (Some(a), Some(b)) => {
-                        self.stack.push(a);
-                        self.stack.push(b);
+                Word::ReferenceNewWord(name) if name.as_str() == "swap" => {
+                    match (self.stack.pop(), self.stack.pop()) {
+                        (Some(a), Some(b)) => {
+                            self.stack.push(a);
+                            self.stack.push(b);
+                        }
+                        _ => return Err(Error::StackUnderflow),
                     }
-                    _ => return Err(Error::StackUnderflow),
-                },
+                }
 
-                Word::Over => match (self.stack.pop(), self.stack.pop()) {
-                    (Some(a), Some(b)) => {
-                        self.stack.push(b);
-                        self.stack.push(a);
-                        self.stack.push(b);
+                Word::ReferenceNewWord(name) if name.as_str() == "over" => {
+                    match (self.stack.pop(), self.stack.pop()) {
+                        (Some(a), Some(b)) => {
+                            self.stack.push(b);
+                            self.stack.push(a);
+                            self.stack.push(b);
+                        }
+                        _ => return Err(Error::StackUnderflow),
                     }
-                    _ => return Err(Error::StackUnderflow),
-                },
+                }
 
                 Word::DefineNewWord(name, words) => {
                     self.user_defined_words
                         .insert(name.clone(), words.to_owned());
-                    dbg!(self.interpret(words.to_owned()))?;
+                    // dbg!(self.interpret(words.to_owned()))?;
                 }
 
                 Word::ReferenceNewWord(name) => {
@@ -137,14 +151,14 @@ fn parse(input: &str) -> Vec<Word> {
                 Some(Word::Push(s.parse::<i32>().unwrap()))
             } else {
                 let word = match s.as_str() {
-                    "+" => Word::Plus,
-                    "-" => Word::Minus,
-                    "*" => Word::Multiply,
-                    "/" => Word::Divide,
-                    "dup" => Word::Duplicate,
-                    "drop" => Word::Drop,
-                    "swap" => Word::Swap,
-                    "over" => Word::Over,
+                    "+" => Word::ReferenceNewWord(s),
+                    "-" => Word::ReferenceNewWord(s),
+                    "*" => Word::ReferenceNewWord(s),
+                    "/" => Word::ReferenceNewWord(s),
+                    "dup" => Word::ReferenceNewWord(s),
+                    "drop" => Word::ReferenceNewWord(s),
+                    "swap" => Word::ReferenceNewWord(s),
+                    "over" => Word::ReferenceNewWord(s),
                     ":" => {
                         let mut word_name = iter.next().unwrap().to_string();
                         word_name.make_ascii_lowercase();
