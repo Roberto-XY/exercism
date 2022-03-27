@@ -216,7 +216,6 @@ fn can_consist_of_built_in_words() {
 }
 
 #[test]
-#[ignore]
 fn execute_in_the_right_order() {
     let mut f = Forth::new();
     assert!(f.eval(": countup 1 2 3 ;").is_ok());
@@ -225,7 +224,6 @@ fn execute_in_the_right_order() {
 }
 
 #[test]
-#[ignore]
 fn redefining_an_existing_word() {
     let mut f = Forth::new();
     assert!(f.eval(": foo dup ;").is_ok());
@@ -244,7 +242,6 @@ fn redefining_an_existing_built_in_word() {
 }
 
 #[test]
-#[ignore]
 fn user_defined_words_are_case_insensitive() {
     let mut f = Forth::new();
     assert!(f.eval(": foo dup ;").is_ok());
@@ -271,7 +268,6 @@ fn redefining_a_built_in_operator() {
 }
 
 #[test]
-#[ignore]
 fn can_use_different_words_with_the_same_name() {
     let mut f = Forth::new();
     assert!(f.eval(": foo 5 ;").is_ok());

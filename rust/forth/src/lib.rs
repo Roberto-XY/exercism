@@ -20,8 +20,8 @@ pub enum Word {
     Drop,
     Swap,
     Over,
-    ReferenceDefined(String),
-    DefineWord(String, Vec<Word>),
+    ReferenceNewWord(String),
+    DefineNewWord(String, Vec<Word>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -47,79 +47,81 @@ impl Forth {
     pub fn eval(&mut self, input: &str) -> Result<(), Error> {
         let word_stack = parse(input);
 
-        // let acc: &mut Vec<i32> = self.stack.as_mut();
-
-        Ok(())
+        dbg!(&word_stack);
+        dbg!(self.interpret(word_stack))
     }
 
     fn interpret(&mut self, word_stack: Vec<Word>) -> Result<(), Error> {
-        word_stack.iter().try_fold(&mut self.stack, |acc, word| {
+        for word in word_stack.iter() {
             match word {
-                Word::Push(num) => Ok(acc.push(*num)),
-
-                Word::Plus => match (acc.pop(), acc.pop()) {
-                    (Some(a), Some(b)) => Ok(acc.push(b + a)),
-                    _ => Err(Error::StackUnderflow),
+                Word::Push(num) => {
+                    dbg!(&self.user_defined_words);
+                    dbg!(&self.stack);
+                    self.stack.push(*num);
+                }
+                Word::Plus => match (self.stack.pop(), self.stack.pop()) {
+                    (Some(a), Some(b)) => self.stack.push(b + a),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Minus => match (acc.pop(), acc.pop()) {
-                    (Some(a), Some(b)) => Ok(acc.push(b - a)),
-                    _ => Err(Error::StackUnderflow),
+                Word::Minus => match (self.stack.pop(), self.stack.pop()) {
+                    (Some(a), Some(b)) => self.stack.push(b - a),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Multiply => match (acc.pop(), acc.pop()) {
-                    (Some(a), Some(b)) => Ok(acc.push(b * a)),
-                    _ => Err(Error::StackUnderflow),
+                Word::Multiply => match (self.stack.pop(), self.stack.pop()) {
+                    (Some(a), Some(b)) => self.stack.push(b * a),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Divide => match (acc.pop(), acc.pop()) {
-                    (Some(0), Some(_)) => Err(Error::DivisionByZero),
-                    (Some(a), Some(b)) => Ok(acc.push(b / a)),
-                    _ => Err(Error::StackUnderflow),
+                Word::Divide => match (self.stack.pop(), self.stack.pop()) {
+                    (Some(0), Some(_)) => return Err(Error::DivisionByZero),
+                    (Some(a), Some(b)) => self.stack.push(b / a),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Duplicate => match acc.last() {
-                    Some(&a) => Ok(acc.push(a)),
-                    _ => Err(Error::StackUnderflow),
+                Word::Duplicate => match self.stack.last() {
+                    Some(&a) => self.stack.push(a),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Drop => match acc.pop() {
-                    Some(_) => Ok(()),
-                    _ => Err(Error::StackUnderflow),
+                Word::Drop => match self.stack.pop() {
+                    Some(_) => (),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Swap => match (acc.pop(), acc.pop()) {
+                Word::Swap => match (self.stack.pop(), self.stack.pop()) {
                     (Some(a), Some(b)) => {
-                        acc.push(a);
-                        acc.push(b);
-                        Ok(())
+                        self.stack.push(a);
+                        self.stack.push(b);
                     }
-                    _ => Err(Error::StackUnderflow),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::Over => match (acc.pop(), acc.pop()) {
+                Word::Over => match (self.stack.pop(), self.stack.pop()) {
                     (Some(a), Some(b)) => {
-                        acc.push(b);
-                        acc.push(a);
-                        acc.push(b);
-                        Ok(())
+                        self.stack.push(b);
+                        self.stack.push(a);
+                        self.stack.push(b);
                     }
-                    _ => Err(Error::StackUnderflow),
+                    _ => return Err(Error::StackUnderflow),
                 },
 
-                Word::DefineWord(name, words) => {
-                    self.user_defined_words.insert(name.clone(), words.to_vec());
-                    Ok(())
+                Word::DefineNewWord(name, words) => {
+                    self.user_defined_words
+                        .insert(name.clone(), words.to_owned());
+                    dbg!(self.interpret(words.to_owned()))?;
                 }
 
-                Word::ReferenceDefined(name) => {
-                    let user_defined_words = &self.user_defined_words;
-                    let words = user_defined_words.get(name).unwrap();
-                    Self::interpret(self, words.to_vec())
+                Word::ReferenceNewWord(name) => {
+                    dbg!(&self.user_defined_words);
+                    dbg!(&self.stack);
+
+                    let words = self.user_defined_words.get(name).unwrap().to_owned();
+                    dbg!(self.interpret(words))?
                 }
             }
-            .map(|_| acc)
-        })?;
+        }
 
         Ok(())
     }
@@ -155,11 +157,11 @@ fn parse(input: &str) -> Vec<Word> {
 
                         dbg!(&word_definition);
 
-                        Word::DefineWord(word_name, dbg!(parse(word_definition.as_str())))
+                        Word::DefineNewWord(word_name, dbg!(parse(word_definition.as_str())))
                     }
                     word_name => {
                         dbg!(word_name);
-                        Word::ReferenceDefined(word_name.to_owned())
+                        Word::ReferenceNewWord(word_name.to_owned())
                     }
                 };
                 Some(word)
@@ -170,33 +172,4 @@ fn parse(input: &str) -> Vec<Word> {
     })
     .fuse()
     .collect()
-}
-
-fn parse2(input: &str) -> Vec<Word> {
-    input
-        .split_ascii_whitespace()
-        .map(|s| {
-            let s = s.to_ascii_lowercase();
-            if s.chars().all(|c| c.is_ascii_digit()) {
-                Word::Push(s.parse::<i32>().unwrap())
-            } else {
-                match s.as_str() {
-                    "+" => Word::Plus,
-                    "-" => Word::Minus,
-                    "*" => Word::Multiply,
-                    "/" => Word::Divide,
-                    "dup" => Word::Duplicate,
-                    "drop" => Word::Drop,
-                    "swap" => Word::Swap,
-                    "over" => Word::Over,
-                    //  str => {
-                    //     match str.chars().collect::<Vec<_>>().as_slice() {
-                    //         [':']
-                    //      }
-                    //  }
-                    _ => panic!("xD"),
-                }
-            }
-        })
-        .collect::<Vec<_>>()
 }
