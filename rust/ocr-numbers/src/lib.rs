@@ -22,11 +22,11 @@ pub fn convert(input: &str) -> Result<String, Error> {
 
     for x in (0..col_len).step_by(4) {
         for y in (0..row_len).step_by(3) {
-            let x = lines[x..x + 4]
+            let string_region = lines[x..x + 4]
                 .iter()
                 .map(|s| s[y..y + 3].to_string())
                 .collect::<Vec<_>>();
-            acc.push(x);
+            acc.push(string_region);
         }
     }
 
