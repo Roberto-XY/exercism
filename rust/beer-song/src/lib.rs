@@ -22,12 +22,13 @@ pub fn verse(n: u32) -> String {
 pub fn sing(start: u32, end: u32) -> String {
     let mut acc = (end..=start)
         .rev()
-        .map(|i| verse(i))
-        .fold(String::new(), |mut acc, verse| {
-            acc.push_str(&verse);
-            acc.push('\n');
-            acc
-        });
+        .map(|i| {
+            let mut verse = verse(i);
+            verse.push('\n');
+            verse
+        })
+        .collect::<String>();
+
     acc.pop();
     acc
 }
