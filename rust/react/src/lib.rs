@@ -3,7 +3,7 @@ use std::{
     fmt::Debug,
     hash::Hash,
     ops::Deref,
-    ptr::NonNull, cell::Cell,
+    ptr::NonNull,
 };
 
 /// `ComputeCellId` is a unique identifier for a compute cell.
@@ -35,7 +35,7 @@ pub struct CallbackId {
     id: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CellId {
     Input(InputCellId),
     Compute(ComputeCellId),
@@ -44,15 +44,11 @@ pub enum CellId {
 #[derive(Clone, Debug, PartialEq)]
 struct InputCell<T> {
     value: T,
-    dependants: HashSet<ComputeCellId>,
 }
 
 impl<T> InputCell<T> {
     fn new(value: T) -> Self {
-        InputCell {
-            value,
-            dependants: HashSet::new(),
-        }
+        InputCell { value }
     }
 }
 
@@ -61,7 +57,6 @@ struct ComputeCell<'a, T> {
     f: Box<dyn Fn(&[T]) -> T + 'a>,
     args: Vec<CellId>,
     callbacks: HashMap<CallbackId, Box<dyn FnMut(T) + 'a>>,
-    dependants: HashSet<ComputeCellId>,
 }
 
 impl<'a, T> ComputeCell<'a, T> {
@@ -71,7 +66,6 @@ impl<'a, T> ComputeCell<'a, T> {
             f,
             args,
             callbacks: HashMap::new(),
-            dependants: HashSet::new(),
         }
     }
 }
@@ -84,8 +78,9 @@ pub enum RemoveCallbackError {
 
 pub struct Reactor<'a, T> {
     input_cells: HashMap<InputCellId, InputCell<T>>,
-    compute_cells: Cell<HashMap<ComputeCellId, ComputeCell<'a, T>>>,
-    last_callback_id: usize,
+    compute_cells: HashMap<ComputeCellId, ComputeCell<'a, T>>,
+    cell_deps: HashMap<CellId, HashSet<ComputeCellId>>,
+    next_callback_id: usize,
 }
 
 // You are guaranteed that Reactor will only be tested against types that are Copy + PartialEq.
@@ -93,8 +88,9 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
     pub fn new() -> Self {
         Reactor {
             input_cells: HashMap::new(),
-            compute_cells: Cell::new(HashMap::new()),
-            last_callback_id: 0,
+            compute_cells: HashMap::new(),
+            cell_deps: HashMap::new(),
+            next_callback_id: 0,
         }
     }
 
@@ -125,39 +121,26 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         dependencies: &[CellId],
         compute_func: F,
     ) -> Result<ComputeCellId, CellId> {
-        let compute_id = ComputeCellId {
+        let args = dependencies
+            .iter()
+            .map(|&cell_id| self.value(cell_id).ok_or(cell_id))
+            .collect::<Result<Vec<T>, CellId>>()?;
+
+        let compute_cell_id = ComputeCellId {
             id: self.compute_cells.len(),
         };
+        let value = compute_func(&args);
+        let compute_cell = ComputeCell::new(value, Box::new(compute_func), dependencies.to_vec());
 
-        let non_existent_dep = dependencies.iter().find(|x| match x {
-            CellId::Compute(id) => !self.compute_cells.contains_key(&id),
-            CellId::Input(id) => !self.input_cells.contains_key(&id),
+        dependencies.iter().for_each(|&cell_id| {
+            self.cell_deps
+                .entry(cell_id)
+                .or_insert(HashSet::new())
+                .insert(compute_cell_id);
         });
 
-        if let Some(&id) = non_existent_dep {
-            return Err(id);
-        }
-
-        self.add_dependants(compute_id, dependencies);
-
-        let value = self.compute_function(&compute_func, &dependencies).unwrap();
-        let cell = ComputeCell::new(value, Box::new(compute_func), dependencies.to_vec());
-        self.compute_cells.insert(compute_id, cell);
-
-        Ok(compute_id)
-    }
-
-    fn add_dependants(&mut self, dependant: ComputeCellId, dependencies: &[CellId]) {
-        dependencies.iter().for_each(|cell| match cell {
-            CellId::Input(id) => {
-                let cell = self.input_cells.get_mut(id).unwrap();
-                cell.dependants.insert(dependant);
-            }
-            CellId::Compute(id) => {
-                let cell = self.compute_cells.get_mut(id).unwrap();
-                cell.dependants.insert(dependant);
-            }
-        });
+        self.compute_cells.insert(compute_cell_id, compute_cell);
+        Ok(compute_cell_id)
     }
 
     // Retrieves the current value of the cell, or None if the cell does not exist.
@@ -169,8 +152,8 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
     // We chose not to cover this here, since this exercise is probably enough work as-is.
     pub fn value(&self, id: CellId) -> Option<T> {
         match id {
-            CellId::Input(id) => self.input_cells.get(&id).map(|x| x.value),
-            CellId::Compute(id) => self.compute_cells.get(&id).map(|x| x.value),
+            CellId::Input(id) => self.input_cells.get(&id).map(|cell| cell.value),
+            CellId::Compute(id) => self.compute_cells.get(&id).map(|cell| cell.value),
         }
     }
 
@@ -179,36 +162,6 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
             .map(|&cell_id| self.value(cell_id))
             .collect::<Option<Vec<T>>>()
             .map(|v| f(&v))
-    }
-
-    fn compute<'b>(&self, compute_cell: &'b mut ComputeCell<'a, T>) -> T
-    where
-        T: Debug,
-    {
-        let args = compute_cell
-            .args
-            .iter()
-            .map(|&cell_id| match cell_id {
-                CellId::Input(id) => self.input_cells.get(&id).map(|x| x.value).unwrap(),
-                CellId::Compute(id) => self
-                    .compute_cells
-                    .get_mut(&id)
-                    .map(|x| self.compute(x))
-                    .unwrap(),
-            })
-            .collect::<Vec<T>>();
-
-        let value = compute_cell.f.deref()(args.deref());
-
-        dbg!(&value);
-
-        if compute_cell.value != value {
-            for callback in compute_cell.callbacks.values_mut() {
-                callback(value);
-            }
-            compute_cell.value = value;
-        };
-        value
     }
 
     // Sets the value of the specified input cell.
@@ -226,16 +179,41 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         if let Some(input_cell) = self.input_cells.get_mut(&id) {
             input_cell.value = new_value;
 
-            dbg!(&new_value);
-            dbg!(&input_cell.dependants);
-
-            for compute_cell_id in input_cell.dependants.clone().iter() {
-                let compute_cell = self.compute_cells.get(compute_cell_id).unwrap();
+            let mut updated = HashMap::new();
+            self.update_cell_deps(&CellId::Input(id), &mut updated);
+            for (id, old_value) in updated {
+                let compute_cell = self.compute_cells.get_mut(&id).unwrap();
+                if compute_cell.value != old_value {
+                    for callback in compute_cell.callbacks.values_mut() {
+                        callback(compute_cell.value)
+                    }
+                }
             }
-
             true
         } else {
             false
+        }
+    }
+
+    fn update_cell_deps(&mut self, cell_id: &CellId, updated: &mut HashMap<ComputeCellId, T>) {
+        if let Some(compute_cell_ids) = self.cell_deps.get(cell_id) {
+            for compute_cell_id in compute_cell_ids.to_owned() {
+                let compute_cell = &self.compute_cells[&compute_cell_id];
+
+                let values = compute_cell
+                    .args
+                    .iter()
+                    .map(|&cell_id| self.value(cell_id).ok_or(cell_id))
+                    .collect::<Result<Vec<T>, CellId>>()
+                    .unwrap();
+
+                let new_value = (compute_cell.f)(&values);
+                if new_value != compute_cell.value {
+                    updated.entry(compute_cell_id).or_insert(compute_cell.value);
+                    self.compute_cells.get_mut(&compute_cell_id).unwrap().value = new_value;
+                    self.update_cell_deps(&CellId::Compute(compute_cell_id), updated);
+                }
+            }
         }
     }
 
@@ -257,13 +235,12 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         callback: F,
     ) -> Option<CallbackId> {
         if let Some(cell) = self.compute_cells.get_mut(&id) {
-            self.last_callback_id += 1;
-
             let callback_id = CallbackId {
-                id: self.last_callback_id,
+                id: self.next_callback_id,
             };
-
+            self.next_callback_id += 1;
             cell.callbacks.insert(callback_id, Box::new(callback));
+
             Some(callback_id)
         } else {
             None
