@@ -1,0 +1,26 @@
+{
+  "blurb": "linked-list",
+  "authors": [
+    "Emerentius"
+  ],
+  "contributors": [
+    "coriolinus",
+    "cwhakes",
+    "efx",
+    "ErikSchierboom",
+    "petertseng",
+    "rofrol"
+  ],
+  "files": {
+    "solution": [
+      "src/lib.rs",
+      "Cargo.toml"
+    ],
+    "test": [
+      "tests/doubly-linked-list.rs"
+    ],
+    "example": [
+      ".meta/example.rs"
+    ]
+  }
+}
