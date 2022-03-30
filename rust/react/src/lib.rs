@@ -2,8 +2,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
-    ops::Deref,
-    ptr::NonNull,
 };
 
 /// `ComputeCellId` is a unique identifier for a compute cell.
@@ -83,6 +81,12 @@ pub struct Reactor<'a, T> {
     next_callback_id: usize,
 }
 
+impl<'a, T: Copy + PartialEq> Default for Reactor<'a, T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // You are guaranteed that Reactor will only be tested against types that are Copy + PartialEq.
 impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
     pub fn new() -> Self {
@@ -135,7 +139,7 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         dependencies.iter().for_each(|&cell_id| {
             self.cell_deps
                 .entry(cell_id)
-                .or_insert(HashSet::new())
+                .or_insert_with(HashSet::new)
                 .insert(compute_cell_id);
         });
 
@@ -157,13 +161,6 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         }
     }
 
-    fn compute_function(&self, f: &impl Fn(&[T]) -> T, args: &[CellId]) -> Option<T> {
-        args.iter()
-            .map(|&cell_id| self.value(cell_id))
-            .collect::<Option<Vec<T>>>()
-            .map(|v| f(&v))
-    }
-
     // Sets the value of the specified input cell.
     //
     // Returns false if the cell does not exist.
@@ -172,16 +169,20 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
     // a `set_value(&mut self, new_value: T)` method on `Cell`.
     //
     // As before, that turned out to add too much extra complexity.
-    pub fn set_value(&mut self, id: InputCellId, new_value: T) -> bool
-    where
-        T: Debug,
-    {
+    pub fn set_value(&mut self, id: InputCellId, new_value: T) -> bool {
         if let Some(input_cell) = self.input_cells.get_mut(&id) {
             input_cell.value = new_value;
 
-            let mut updated = HashMap::new();
-            self.update_cell_deps(&CellId::Input(id), &mut updated);
-            for (id, old_value) in updated {
+            let mut updated_cells = HashMap::new();
+            Self::update_cell_deps(
+                &self.input_cells,
+                &mut self.compute_cells,
+                &self.cell_deps,
+                &CellId::Input(id),
+                &mut updated_cells,
+            );
+
+            for (id, old_value) in updated_cells {
                 let compute_cell = self.compute_cells.get_mut(&id).unwrap();
                 if compute_cell.value != old_value {
                     for callback in compute_cell.callbacks.values_mut() {
@@ -195,23 +196,43 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         }
     }
 
-    fn update_cell_deps(&mut self, cell_id: &CellId, updated: &mut HashMap<ComputeCellId, T>) {
-        if let Some(compute_cell_ids) = self.cell_deps.get(cell_id) {
-            for compute_cell_id in compute_cell_ids.to_owned() {
-                let compute_cell = &self.compute_cells[&compute_cell_id];
+    fn update_cell_deps(
+        input_cells: &HashMap<InputCellId, InputCell<T>>,
+        compute_cells: &mut HashMap<ComputeCellId, ComputeCell<T>>,
+        cell_deps: &HashMap<CellId, HashSet<ComputeCellId>>,
+        cell_id: &CellId,
+        updated_cells: &mut HashMap<ComputeCellId, T>,
+    ) {
+        if let Some(compute_cell_ids) = cell_deps.get(cell_id) {
+            for &compute_cell_id in compute_cell_ids.iter() {
+                let compute_cell = &compute_cells[&compute_cell_id];
 
                 let values = compute_cell
                     .args
                     .iter()
-                    .map(|&cell_id| self.value(cell_id).ok_or(cell_id))
+                    .map(|&cell_id| {
+                        match cell_id {
+                            CellId::Input(id) => input_cells.get(&id).map(|cell| cell.value),
+                            CellId::Compute(id) => compute_cells.get(&id).map(|cell| cell.value),
+                        }
+                        .ok_or(cell_id)
+                    })
                     .collect::<Result<Vec<T>, CellId>>()
                     .unwrap();
 
                 let new_value = (compute_cell.f)(&values);
                 if new_value != compute_cell.value {
-                    updated.entry(compute_cell_id).or_insert(compute_cell.value);
-                    self.compute_cells.get_mut(&compute_cell_id).unwrap().value = new_value;
-                    self.update_cell_deps(&CellId::Compute(compute_cell_id), updated);
+                    updated_cells
+                        .entry(compute_cell_id)
+                        .or_insert(compute_cell.value);
+                    compute_cells.get_mut(&compute_cell_id).unwrap().value = new_value;
+                    Self::update_cell_deps(
+                        input_cells,
+                        compute_cells,
+                        cell_deps,
+                        &CellId::Compute(compute_cell_id),
+                        updated_cells,
+                    );
                 }
             }
         }
@@ -258,7 +279,7 @@ impl<'a, T: Copy + PartialEq> Reactor<'a, T> {
         callback: CallbackId,
     ) -> Result<(), RemoveCallbackError> {
         if let Some(cell) = self.compute_cells.get_mut(&cell) {
-            if let Some(_) = cell.callbacks.remove(&callback) {
+            if cell.callbacks.remove(&callback).is_some() {
                 Ok(())
             } else {
                 Err(RemoveCallbackError::NonexistentCallback)
