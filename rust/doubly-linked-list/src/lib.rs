@@ -148,14 +148,14 @@ impl<T> Cursor<'_, T> {
                     let next = self.list.head;
                     self.current = next;
                     self.index = 0;
-                    dbg!(next)
+                    next
                 }
 
                 Some(current) => {
                     let next = (*current).next;
                     self.current = next;
                     self.index += 1;
-                    dbg!(next)
+                    next
                 }
             };
             next.map(|next| &mut (*next).element)
