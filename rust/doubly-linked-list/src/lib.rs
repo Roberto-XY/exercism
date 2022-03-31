@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ptr::NonNull};
 
 // this module adds some functionality based on the required implementations
 // here like: `LinkedList::pop_back` or `Clone for LinkedList<T>`
@@ -6,14 +6,17 @@ use std::marker::PhantomData;
 mod pre_implemented;
 
 pub struct LinkedList<T> {
-    head: Option<*mut Node<T>>,
-    tail: Option<*mut Node<T>>,
+    head: Option<NonNull<Node<T>>>,
+    tail: Option<NonNull<Node<T>>>,
     len: usize,
 }
 
+unsafe impl<T> Send for LinkedList<T> where T: Send {}
+unsafe impl<T> Sync for LinkedList<T> where T: Sync {}
+
 struct Node<T> {
-    next: Option<*mut Node<T>>,
-    prev: Option<*mut Node<T>>,
+    next: Option<NonNull<Node<T>>>,
+    prev: Option<NonNull<Node<T>>>,
     element: T,
 }
 
@@ -29,12 +32,12 @@ impl<T> Node<T> {
 
 pub struct Cursor<'a, T: 'a> {
     index: usize,
-    current: Option<*mut Node<T>>,
+    current: Option<NonNull<Node<T>>>,
     list: &'a mut LinkedList<T>,
 }
 
 pub struct Iter<'a, T> {
-    head: Option<*mut Node<T>>,
+    head: Option<NonNull<Node<T>>>,
     len: usize,
     marker: PhantomData<&'a T>,
 }
@@ -88,16 +91,16 @@ impl<T> LinkedList<T> {
         }
     }
 
-    fn unlink_node(&mut self, node: *mut Node<T>) {
-        let node = unsafe { &mut *node };
+    fn unlink_node(&mut self, mut node: NonNull<Node<T>>) {
+        let node = unsafe { node.as_mut() };
 
         match node.prev {
-            Some(prev) => unsafe { (*prev).next = node.next },
+            Some(mut prev) => unsafe { prev.as_mut().next = node.next },
             None => self.head = node.next,
         };
 
         match node.next {
-            Some(next) => unsafe { (*next).prev = node.prev },
+            Some(mut next) => unsafe { next.as_mut().prev = node.prev },
             None => self.tail = node.prev,
         };
 
@@ -106,25 +109,25 @@ impl<T> LinkedList<T> {
 
     unsafe fn splice_nodes(
         &mut self,
-        existing_prev: Option<*mut Node<T>>,
-        existing_next: Option<*mut Node<T>>,
-        mut splice_start: *mut Node<T>,
-        mut splice_end: *mut Node<T>,
+        existing_prev: Option<NonNull<Node<T>>>,
+        existing_next: Option<NonNull<Node<T>>>,
+        mut splice_start: NonNull<Node<T>>,
+        mut splice_end: NonNull<Node<T>>,
         splice_length: usize,
     ) {
         if let Some(mut existing_prev) = existing_prev {
-            (*existing_prev).next = Some(splice_start);
+            existing_prev.as_mut().next = Some(splice_start);
         } else {
             self.head = Some(splice_start);
         }
         if let Some(mut existing_next) = existing_next {
-            (*existing_next).prev = Some(splice_end);
+            existing_next.as_mut().prev = Some(splice_end);
         } else {
             self.tail = Some(splice_end);
         }
 
-        (*splice_start).prev = existing_prev;
-        (*splice_end).next = existing_next;
+        splice_start.as_mut().prev = existing_prev;
+        splice_end.as_mut().next = existing_next;
 
         self.len += splice_length;
     }
@@ -135,7 +138,7 @@ impl<T> LinkedList<T> {
 impl<T> Cursor<'_, T> {
     /// Take a mutable reference to the current element
     pub fn peek_mut(&mut self) -> Option<&mut T> {
-        unsafe { self.current.map(|next| &mut (*next).element) }
+        unsafe { self.current.map(|mut next| &mut next.as_mut().element) }
     }
 
     /// Move one position forward (towards the back) and
@@ -152,13 +155,13 @@ impl<T> Cursor<'_, T> {
                 }
 
                 Some(current) => {
-                    let next = (*current).next;
+                    let next = current.as_ref().next;
                     self.current = next;
                     self.index += 1;
                     next
                 }
             };
-            next.map(|next| &mut (*next).element)
+            next.map(|mut next| &mut next.as_mut().element)
         }
     }
 
@@ -173,13 +176,13 @@ impl<T> Cursor<'_, T> {
                 }
 
                 Some(current) => {
-                    let prev = (*current).prev;
+                    let prev = current.as_ref().prev;
                     self.current = prev;
                     self.index -= 1;
                     prev
                 }
             };
-            prev.map(|prev| &mut (*prev).element)
+            prev.map(|mut prev| &mut prev.as_mut().element)
         }
     }
 
@@ -190,14 +193,14 @@ impl<T> Cursor<'_, T> {
         let removed_node = self.current?;
         unsafe {
             if self.index < self.list.len - 1 {
-                self.current = (*removed_node).next;
+                self.current = removed_node.as_ref().next;
                 self.list.unlink_node(removed_node);
-                let removed_node = Box::from_raw(removed_node);
+                let removed_node = Box::from_raw(removed_node.as_ptr());
                 Some(removed_node.element)
             } else {
-                self.current = (*removed_node).prev;
+                self.current = removed_node.as_ref().prev;
                 self.list.unlink_node(removed_node);
-                let removed_node = Box::from_raw(removed_node);
+                let removed_node = Box::from_raw(removed_node.as_ptr());
                 Some(removed_node.element)
             }
         }
@@ -205,10 +208,10 @@ impl<T> Cursor<'_, T> {
 
     pub fn insert_after(&mut self, element: T) {
         unsafe {
-            let spliced_node = Box::leak(Box::new(Node::new(element)));
+            let spliced_node = Box::leak(Box::new(Node::new(element))).into();
             let node_next = match self.current {
                 None => self.list.head,
-                Some(node) => (*node).next,
+                Some(node) => node.as_ref().next,
             };
             self.list
                 .splice_nodes(self.current, node_next, spliced_node, spliced_node, 1);
@@ -220,10 +223,10 @@ impl<T> Cursor<'_, T> {
 
     pub fn insert_before(&mut self, element: T) {
         unsafe {
-            let spliced_node = Box::leak(Box::new(Node::new(element)));
+            let spliced_node = Box::leak(Box::new(Node::new(element))).into();
             let node_prev = match self.current {
                 None => self.list.tail,
-                Some(node) => (*node).prev,
+                Some(node) => node.as_ref().prev,
             };
             self.list
                 .splice_nodes(node_prev, self.current, spliced_node, spliced_node, 1);
@@ -240,7 +243,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
             None
         } else {
             self.head.map(|next_node| unsafe {
-                let next_node = &*next_node;
+                let next_node = next_node.as_ref();
                 self.len -= 1;
                 self.head = next_node.next;
                 &next_node.element
