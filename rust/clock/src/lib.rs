@@ -25,20 +25,20 @@ impl Clock {
         let hour = (minutes / MINUTES_IN_HOUR) % HOURS_IN_DAY;
 
         if minutes % MINUTES_IN_HOUR < 0 {
-            Clock::fix_negative_time(hour - 1, HOURS_IN_DAY) as u8
+            Clock::shift_negative_value(hour - 1, HOURS_IN_DAY) as u8
         } else if hour < 0 {
-            Clock::fix_negative_time(hour, HOURS_IN_DAY) as u8
+            Clock::shift_negative_value(hour, HOURS_IN_DAY) as u8
         } else {
             hour as u8
         }
     }
 
     fn calculate_minutes(minutes: i32) -> u8 {
-        Clock::fix_negative_time(minutes % MINUTES_IN_HOUR, MINUTES_IN_HOUR) as u8
+        Clock::shift_negative_value(minutes % MINUTES_IN_HOUR, MINUTES_IN_HOUR) as u8
     }
 
-    fn fix_negative_time(value: i32, base: i32) -> i32 {
-        ((value + base) % base)
+    fn shift_negative_value(value: i32, base: i32) -> i32 {
+        (value + base) % base
     }
 }
 
